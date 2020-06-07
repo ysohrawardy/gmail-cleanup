@@ -12,12 +12,10 @@ SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
 # For each id in list, get message metadata
 
 METADATA_HEADERS = ['From','To','Subject','Date']
+DATE_RE = "\d+ (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}"
+DATE_PATTERN = re.compile(DATE_RE)
 DATE_FORMAT = '%d %b %Y'
-#DATE_FORMAT2 = '%a, %d %b %Y %H:%M:%S %z %Z'
-#DAYS_OF_WEEK_RE = 'Mon|Tue|Wed|Thu|Fri|Sat|Sun'
-#DAYS_OF_WEEK_PATTERN = re.compile(DAYS_OF_WEEK_RE)
-#TZ_RE = '\([A-Z]{3}\)'
-#TZ_PATTERN = re.compile(TZ_RE)
+DATE_FORMAT2 = '%d %b %Y'
 
 def get_authorized_service():
     store = file.Storage('token.json')
@@ -28,58 +26,45 @@ def get_authorized_service():
     service = build('gmail', 'v1', http=creds.authorize(Http()))
     return service
 
-def get_message_ids(service, nextPageToken = None):
-    results = None
-    if nextPageToken:
-        results = service.users().messages().list(userId='me', labelIds='CATEGORY_PERSONAL', maxResults=100).execute()
-    else:
-        results = service.users().messages().list(userId='me', labelIds='CATEGORY_PERSONAL', maxResults=100,
-                                                  pageToken=nextPageToken).execute()
-
-    if results:
-        messages = results.get('messages', [])
-        nextPageToken = results.get('nextPageToken')
-        return (messages, nextPageToken)
-
-def process_messages(service, message_dates, message_senders, messageIds):
+def process_messages(service, message_dates, message_senders, message_subjects, messageIds):
     idx = 0
     for messageId in messageIds:
         idx += 1
-#       print ("Retrieving message " + messageId['id'])
-        message = service.users().messages().get(userId='me', id=messageId['id'], format='metadata',
+        print ("Retrieving message " + messageId)
+        message = service.users().messages().get(userId='me', id=messageId, format='metadata',
                                                  metadataHeaders=METADATA_HEADERS).execute()
         if not message:
-            print('Message ' + messages[0]['id'] + ' not retrieved')
+            print('Message ' + messagesId + ' not retrieved')
         else:
             try:
-                payload = message['payload'] # if message['payload'] else print("No payload"); continue
-                headers = payload['headers'] #if payload['headers'] else print("No headers"); continue
-                process_headers(headers, message_dates, message_senders)
-            except e:
-                print ("Error processing message " + messageId['id'])
+                payload = message['payload']
+                headers = payload['headers']
+                print(f"payload {payload} headers {headers}")
+                process_headers(headers, message_dates, message_senders, message_subjects)
+            except Exception as e:
+                print (f"Error processing message {messageId} {str(e)}")
         if idx == 90:
             print(str(message_dates))
             sys.exit(0)
 
-def process_headers(headers, message_dates, message_senders):
+def process_headers(headers, message_dates, message_senders, message_subjects):
     for header in headers:
 #        print (header['name'] + ' ' + header['value'])
         if header['name'] == 'Date':
             process_date(message_dates, header['value'])
         elif header['name'] == 'From':
             process_sender(message_senders, header['value'])
+        elif header['name'] == 'Subject':
+            process_subject(message_subjects, header['value'])
 
-def process_date(message_dates, date_str):
+def process_date(message_dates, email_datetime_str):
     try:
-        dt = None
-
-        if not DAYS_OF_WEEK_PATTERN.match(date_str):
-            print ("Working on parsing " + date_str)
+        date_str = DATE_PATTERN.search(email_datetime_str)
+#        print(date_str)
+        if not date_str:
+            print ("Unable to find date in " + date_str)
         else:
-            if TZ_PATTERN.search(date_str):
-                dt = datetime.datetime.strptime(date_str, DATE_FORMAT2)
-            else:
-                dt = datetime.datetime.strptime(date_str, DATE_FORMAT)
+            dt = datetime.datetime.strptime(date_str.group(), DATE_FORMAT2)
 
         if dt:
             key = str(dt.year) + '-' + str(dt.month)
@@ -91,6 +76,10 @@ def process_date(message_dates, date_str):
         print ("Unable to parse " + date_str)
 
 def process_sender(message_senders, sender):
+    pass
+#    print(sender)
+
+def process_subject(message_subjects, sender):
     pass
 #    print(sender)
 
@@ -109,17 +98,10 @@ def main():
     
     message_dates = {}
     message_senders = {}
+    message_subjects = {}
     pageNum = 0
-    (messageIds, nextPageToken) = get_message_ids(service)
-    while (nextPageToken is not None and pageNum < 3):
-        pageNum += 1
-        print ("Page " + str(pageNum))
-        if not messageIds:
-            print('No messages found.')
-            break
-        print("Processing messages page " + str(pageNum))
-        process_messages(service, message_dates, message_senders, messageIds)
-        (messageIds, nextPageToken) = get_message_ids(service, nextPageToken)
+    messageIds = ['12bac18dfba17d1e']
+    process_messages(service, message_dates, message_senders, message_subjects, messageIds)
         
  #       
  #   else:
